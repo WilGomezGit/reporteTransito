@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.LatLng
 import com.reportetransito.app.data.model.Incident
+import com.reportetransito.app.data.model.IncidentCategory
 import com.reportetransito.app.data.model.IncidentType
 import com.reportetransito.app.data.repository.IncidentRepository
 import com.reportetransito.app.data.repository.PicoPlacaRepository
@@ -14,7 +15,9 @@ import javax.inject.Inject
 
 data class MapUiState(
     val incidents: List<Incident> = emptyList(),
+    val filteredIncidents: List<Incident> = emptyList(),
     val selectedIncident: Incident? = null,
+    val activeFilter: IncidentCategory? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
     val reportSuccess: Boolean = false
@@ -44,7 +47,14 @@ class MapViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = true) }
                 incidentRepository.getActiveIncidents(cityId)
             }.collect { incidents ->
-                _uiState.update { it.copy(incidents = incidents, isLoading = false) }
+                val filter = _uiState.value.activeFilter
+                _uiState.update {
+                    it.copy(
+                        incidents = incidents,
+                        filteredIncidents = applyFilter(incidents, filter),
+                        isLoading = false
+                    )
+                }
             }
         }
     }
@@ -55,6 +65,17 @@ class MapViewModel @Inject constructor(
 
     fun selectIncident(incident: Incident?) {
         _uiState.update { it.copy(selectedIncident = incident) }
+    }
+
+    fun setFilter(category: IncidentCategory?) {
+        val current = _uiState.value
+        val newFilter = if (current.activeFilter == category) null else category
+        _uiState.update {
+            it.copy(
+                activeFilter = newFilter,
+                filteredIncidents = applyFilter(current.incidents, newFilter)
+            )
+        }
     }
 
     fun reportIncident(type: IncidentType, location: LatLng, description: String) {
@@ -70,12 +91,8 @@ class MapViewModel @Inject constructor(
                 )
             )
             result.fold(
-                onSuccess = {
-                    _uiState.update { it.copy(isLoading = false, reportSuccess = true) }
-                },
-                onFailure = { e ->
-                    _uiState.update { it.copy(isLoading = false, error = e.message) }
-                }
+                onSuccess = { _uiState.update { it.copy(isLoading = false, reportSuccess = true) } },
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
             )
         }
     }
@@ -86,11 +103,10 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    fun clearReportSuccess() {
-        _uiState.update { it.copy(reportSuccess = false) }
-    }
+    fun clearReportSuccess() = _uiState.update { it.copy(reportSuccess = false) }
+    fun clearError() = _uiState.update { it.copy(error = null) }
 
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
-    }
+    private fun applyFilter(incidents: List<Incident>, filter: IncidentCategory?): List<Incident> =
+        if (filter == null) incidents
+        else incidents.filter { it.incidentType.category == filter }
 }

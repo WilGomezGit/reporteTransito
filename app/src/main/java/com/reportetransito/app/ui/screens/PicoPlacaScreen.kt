@@ -251,7 +251,7 @@ private fun ScheduleCard(schedules: List<PicoPlacaSchedule>) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-                if (schedules.last() != schedule) Divider(modifier = Modifier.padding(vertical = 4.dp))
+                if (schedules.last() != schedule) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
             }
         }
     }

@@ -1,8 +1,11 @@
 package com.reportetransito.app.ui.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import androidx.compose.animation.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -12,35 +15,38 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import com.reportetransito.app.data.model.Incident
-import com.reportetransito.app.data.repository.PicoPlacaRepository
+import com.reportetransito.app.data.model.IncidentCategory
 import com.reportetransito.app.ui.components.IncidentInfoCard
 import com.reportetransito.app.viewmodel.MapViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun MapScreen(
-    viewModel: MapViewModel = hiltViewModel()
-) {
+fun MapScreen(viewModel: MapViewModel = hiltViewModel()) {
+    val context = LocalContext.current
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
     val uiState by viewModel.uiState.collectAsState()
     val cityId by viewModel.cityId.collectAsState()
     val city = viewModel.currentCity
 
-    val defaultPosition = LatLng(
-        city?.defaultLat ?: 4.7110,
-        city?.defaultLng ?: -74.0721
-    )
+    val defaultPosition = LatLng(city?.defaultLat ?: 4.7110, city?.defaultLng ?: -74.0721)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(defaultPosition, city?.defaultZoom ?: 13f)
     }
@@ -51,7 +57,9 @@ fun MapScreen(
     var showReportSheet by remember { mutableStateOf(false) }
     var reportLocation by remember { mutableStateOf(defaultPosition) }
     var showCityPicker by remember { mutableStateOf(false) }
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
 
+    // Center on city when selection changes
     LaunchedEffect(city) {
         city?.let {
             cameraPositionState.animate(
@@ -60,7 +68,24 @@ fun MapScreen(
         }
     }
 
+    // Center on user location once permission is granted
+    LaunchedEffect(locationPermission.status.isGranted) {
+        if (locationPermission.status.isGranted) {
+            runCatching {
+                val location = fusedLocationClient.lastLocation.await()
+                location?.let {
+                    val latLng = LatLng(it.latitude, it.longitude)
+                    userLocation = latLng
+                    cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLngZoom(latLng, 15f)
+                    )
+                }
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
+        // ── MAP ──────────────────────────────────────────────────────────
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
@@ -77,103 +102,134 @@ fun MapScreen(
                 reportLocation = latLng
                 showReportSheet = true
             },
-            onMapClick = {
-                viewModel.selectIncident(null)
-            }
+            onMapClick = { viewModel.selectIncident(null) }
         ) {
-            uiState.incidents.forEach { incident ->
-                IncidentMarker(
-                    incident = incident,
-                    onClick = {
-                        viewModel.selectIncident(incident)
-                        true
-                    }
-                )
+            uiState.filteredIncidents.forEach { incident ->
+                IncidentMarker(incident = incident, onClick = {
+                    viewModel.selectIncident(incident)
+                    true
+                })
             }
         }
 
-        // Top bar: city selector
-        Card(
+        // ── TOP COLUMN: city bar + filter chips ──────────────────────────
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                .padding(top = 16.dp)
                 .fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // City selector card
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocationCity,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = city?.name ?: "Seleccionar ciudad",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    TextButton(onClick = { showCityPicker = true }) {
+                        Text("Cambiar")
+                    }
+                }
+            }
+
+            // Filter chips row
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.LocationCity,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = city?.name ?: "Seleccionar ciudad",
-                        style = MaterialTheme.typography.titleSmall
+                // "Todos" chip
+                FilterChip(
+                    selected = uiState.activeFilter == null,
+                    onClick = { viewModel.setFilter(null) },
+                    label = { Text("Todos (${uiState.incidents.size})") }
+                )
+                IncidentCategory.entries.forEach { cat ->
+                    val count = uiState.incidents.count { it.incidentType.category == cat }
+                    FilterChip(
+                        selected = uiState.activeFilter == cat,
+                        onClick = { viewModel.setFilter(cat) },
+                        label = { Text("${cat.emoji} ${cat.label} ($count)") }
                     )
                 }
-                TextButton(onClick = { showCityPicker = true }) {
-                    Text("Cambiar")
+            }
+
+            // Long-press hint (only shown when no incidents)
+            if (uiState.incidents.isEmpty() && !uiState.isLoading) {
+                Card(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+                    )
+                ) {
+                    Text(
+                        text = "Mantén presionado el mapa para reportar",
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
             }
         }
 
-        // Hint: long press to report
-        Card(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 80.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-            )
-        ) {
-            Text(
-                text = "Mantén presionado el mapa para reportar",
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-
-        // FAB: report at current location
+        // ── FABs bottom-right ────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (locationPermission.status.isGranted) {
-                SmallFloatingActionButton(
-                    onClick = {
+            SmallFloatingActionButton(
+                onClick = {
+                    if (locationPermission.status.isGranted) {
                         coroutineScope.launch {
-                            // Center on user location is handled by MyLocation button style
+                            runCatching {
+                                val location = fusedLocationClient.lastLocation.await()
+                                location?.let {
+                                    val latLng = LatLng(it.latitude, it.longitude)
+                                    userLocation = latLng
+                                    cameraPositionState.animate(
+                                        CameraUpdateFactory.newLatLngZoom(latLng, 16f)
+                                    )
+                                }
+                            }
                         }
-                    },
-                    containerColor = MaterialTheme.colorScheme.surface
-                ) {
-                    Icon(Icons.Default.MyLocation, contentDescription = "Mi ubicación")
-                }
-            } else {
-                SmallFloatingActionButton(
-                    onClick = { locationPermission.launchPermissionRequest() },
-                    containerColor = MaterialTheme.colorScheme.surface
-                ) {
-                    Icon(Icons.Default.MyLocation, contentDescription = "Permitir ubicación")
-                }
+                    } else {
+                        locationPermission.launchPermissionRequest()
+                    }
+                },
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Mi ubicación")
             }
 
             FloatingActionButton(
                 onClick = {
-                    reportLocation = cameraPositionState.position.target
+                    reportLocation = userLocation ?: cameraPositionState.position.target
                     showReportSheet = true
                 },
                 containerColor = MaterialTheme.colorScheme.primary
@@ -182,8 +238,8 @@ fun MapScreen(
             }
         }
 
-        // Active incidents count badge
-        if (uiState.incidents.isNotEmpty()) {
+        // ── Active incidents badge ────────────────────────────────────────
+        if (uiState.filteredIncidents.isNotEmpty()) {
             Card(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -194,7 +250,7 @@ fun MapScreen(
                 )
             ) {
                 Text(
-                    text = "🚨 ${uiState.incidents.size} novedad(es) activa(s)",
+                    text = "🚨 ${uiState.filteredIncidents.size} novedad(es) activa(s)",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -202,7 +258,7 @@ fun MapScreen(
             }
         }
 
-        // Selected incident card
+        // ── Selected incident card ────────────────────────────────────────
         AnimatedVisibility(
             visible = uiState.selectedIncident != null,
             modifier = Modifier
@@ -223,7 +279,7 @@ fun MapScreen(
             }
         }
 
-        // Loading indicator
+        // ── Loading bar ───────────────────────────────────────────────────
         if (uiState.isLoading) {
             LinearProgressIndicator(
                 modifier = Modifier
@@ -231,9 +287,20 @@ fun MapScreen(
                     .align(Alignment.TopCenter)
             )
         }
+
+        // ── Error snackbar ────────────────────────────────────────────────
+        uiState.error?.let { error ->
+            Snackbar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp),
+                action = {
+                    TextButton(onClick = { viewModel.clearError() }) { Text("OK") }
+                }
+            ) { Text(error) }
+        }
     }
 
-    // Report sheet
     if (showReportSheet) {
         ReportIncidentBottomSheet(
             reportLocation = reportLocation,
@@ -242,29 +309,22 @@ fun MapScreen(
         )
     }
 
-    // City picker dialog
     if (showCityPicker) {
         CityPickerDialog(
-            cities = viewModel.currentCity?.let {
-                // pass all cities from repo
-                listOf()
-            } ?: emptyList(),
-            viewModel = viewModel,
+            currentCityId = cityId,
+            onCitySelected = { viewModel.selectCity(it) },
             onDismiss = { showCityPicker = false }
         )
     }
 }
 
 @Composable
-private fun IncidentMarker(
-    incident: Incident,
-    onClick: () -> Boolean
-) {
+private fun IncidentMarker(incident: Incident, onClick: () -> Boolean) {
     val type = incident.incidentType
     Marker(
         state = MarkerState(position = LatLng(incident.latitude, incident.longitude)),
         icon = BitmapDescriptorFactory.defaultMarker(type.markerHue),
-        title = type.label,
+        title = "${type.displayEmoji} ${type.label}",
         snippet = incident.description.ifBlank { "Toca para ver detalles" },
         onClick = { onClick() }
     )
@@ -272,29 +332,25 @@ private fun IncidentMarker(
 
 @Composable
 private fun CityPickerDialog(
-    cities: List<Any>,
-    viewModel: MapViewModel,
+    currentCityId: String,
+    onCitySelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val allCities = remember {
-        listOf(
-            "bogota" to "Bogotá D.C.",
-            "medellin" to "Medellín",
-            "cali" to "Cali",
-            "barranquilla" to "Barranquilla",
-            "bucaramanga" to "Bucaramanga",
-            "pereira" to "Pereira",
-            "manizales" to "Manizales"
-        )
-    }
-    val cityId by viewModel.cityId.collectAsState()
-
+    val cities = listOf(
+        "bogota" to "Bogotá D.C.",
+        "medellin" to "Medellín",
+        "cali" to "Cali",
+        "barranquilla" to "Barranquilla",
+        "bucaramanga" to "Bucaramanga",
+        "pereira" to "Pereira",
+        "manizales" to "Manizales"
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Seleccionar ciudad") },
         text = {
             Column {
-                allCities.forEach { (id, name) ->
+                cities.forEach { (id, name) ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -302,11 +358,8 @@ private fun CityPickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = cityId == id,
-                            onClick = {
-                                viewModel.selectCity(id)
-                                onDismiss()
-                            }
+                            selected = currentCityId == id,
+                            onClick = { onCitySelected(id); onDismiss() }
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(name)
@@ -314,8 +367,6 @@ private fun CityPickerDialog(
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cerrar") }
-        }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
     )
 }

@@ -4,19 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.model.LatLng
+import com.reportetransito.app.data.model.IncidentCategory
 import com.reportetransito.app.data.model.IncidentType
 import com.reportetransito.app.viewmodel.MapViewModel
 
@@ -27,7 +29,7 @@ fun ReportIncidentBottomSheet(
     viewModel: MapViewModel,
     onDismiss: () -> Unit
 ) {
-    var selectedType by remember { mutableStateOf(IncidentType.ACCIDENT) }
+    var selectedType by remember { mutableStateOf(IncidentType.ACCIDENTE) }
     var description by remember { mutableStateOf("") }
     val uiState by viewModel.uiState.collectAsState()
 
@@ -57,54 +59,119 @@ fun ReportIncidentBottomSheet(
                 text = "¿Qué está pasando en esta vía?",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
             )
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+            // Types grouped by category
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(IncidentType.entries) { type ->
-                    val isSelected = selectedType == type
-                    Column(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) type.color
-                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(12.dp)
+                IncidentCategory.entries.forEach { category ->
+                    val types = IncidentType.entries.filter { it.category == category }
+
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .background(category.chipColor, shape = RoundedCornerShape(50))
                             )
-                            .background(
-                                if (isSelected) type.color.copy(alpha = 0.1f)
-                                else MaterialTheme.colorScheme.surface
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "${category.emoji} ${category.label}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = category.chipColor
                             )
-                            .clickable { selectedType = type }
-                            .padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(text = type.emoji, fontSize = 28.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = type.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) type.color
-                            else MaterialTheme.colorScheme.onSurface
-                        )
+                        }
+                    }
+
+                    items(types) { type ->
+                        val isSelected = selectedType == type
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) type.color
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .background(
+                                    if (isSelected) type.color.copy(alpha = 0.10f)
+                                    else MaterialTheme.colorScheme.surface
+                                )
+                                .clickable { selectedType = type }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(text = type.displayEmoji, fontSize = 22.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = type.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) type.color
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            // Code badge
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) type.color.copy(alpha = 0.15f)
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = type.code,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) type.color
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // Selected type preview
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = selectedType.color.copy(alpha = 0.08f)
+                ),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = selectedType.fullLabel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = selectedType.color,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Descripción (opcional)") },
-                placeholder = { Text("Ej: accidente en el carril derecho...") },
+                label = { Text("Detalles adicionales (opcional)") },
+                placeholder = { Text("Ej: carril derecho, 2 vehículos involucrados...") },
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3,
                 shape = RoundedCornerShape(12.dp)
@@ -114,7 +181,7 @@ fun ReportIncidentBottomSheet(
 
             Button(
                 onClick = {
-                    viewModel.reportIncident(selectedType, reportLocation, description)
+                    viewModel.reportIncident(selectedType, reportLocation, description.trim())
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,7 +192,8 @@ fun ReportIncidentBottomSheet(
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
                     )
                 } else {
                     Text("Enviar reporte", style = MaterialTheme.typography.labelLarge)
