@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /incidents/{incidentId} {
+      // Anyone can read incidents
+      allow read: if true;
+
+      // Only authenticated users can create incidents
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll(['type','latitude','longitude','cityId','reportedBy','createdAt','lastConfirmedAt','confirmations'])
+        && request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.latitude is float
+        && request.resource.data.longitude is float;
+
+      // Only owner can update (to confirm), and only allowed fields
+      allow update: if request.auth != null
+        && (
+          // Owner updates
+          resource.data.reportedBy == request.auth.uid
+          ||
+          // Any logged-in user can confirm (update lastConfirmedAt and confirmations)
+          (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastConfirmedAt','confirmations']))
+        );
+
+      // Only owner can delete
+      allow delete: if request.auth != null
+        && resource.data.reportedBy == request.auth.uid;
+    }
+  }
+}

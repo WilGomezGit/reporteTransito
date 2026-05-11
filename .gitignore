@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# NOTE: Replace app/google-services.json with your real Firebase config
+# Uncomment to ignore it once you add the real file:
+# app/google-services.json

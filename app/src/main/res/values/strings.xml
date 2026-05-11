@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Reporte Tránsito</string>
+    <string name="map_tab">Mapa</string>
+    <string name="pico_placa_tab">Pico y Placa</string>
+    <string name="report_incident">Reportar novedad</string>
+    <string name="confirm_incident">Confirmar</string>
+    <string name="incident_type_label">Tipo de novedad</string>
+    <string name="description_hint">Descripción (opcional)</string>
+    <string name="submit">Enviar reporte</string>
+    <string name="cancel">Cancelar</string>
+    <string name="location_permission_rationale">Necesitamos tu ubicación para mostrar novedades cercanas y reportar tu posición.</string>
+    <string name="no_incidents">No hay novedades activas en esta zona</string>
+    <string name="incident_expires_soon">Expira pronto</string>
+    <string name="incident_confirmed_count">%d confirmaciones</string>
+    <string name="select_city">Seleccionar ciudad</string>
+    <string name="today_restrictions">Restricciones de hoy</string>
+    <string name="no_restriction">Sin restricción hoy</string>
+    <string name="pico_placa_morning">Mañana</string>
+    <string name="pico_placa_afternoon">Tarde</string>
+    <string name="plates_restricted">Placas restringidas</string>
+</resources>

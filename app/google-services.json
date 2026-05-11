@@ -1,0 +1,12 @@
+{
+  "_INSTRUCCIONES_": "Reemplaza este archivo con el google-services.json de tu proyecto Firebase.",
+  "_PASOS_": [
+    "1. Ve a https://console.firebase.google.com",
+    "2. Crea un nuevo proyecto (ej: reporte-transito)",
+    "3. Registra la app Android con el paquete: com.reportetransito.app",
+    "4. Descarga el google-services.json y reemplaza este archivo",
+    "5. Activa Firestore Database en modo producción",
+    "6. Activa Authentication > Anonymous sign-in",
+    "7. Despliega las reglas de Firestore desde firestore.rules"
+  ]
+}

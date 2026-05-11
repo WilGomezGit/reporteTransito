@@ -1,0 +1,3 @@
+-keep class com.reportetransito.app.data.model.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
